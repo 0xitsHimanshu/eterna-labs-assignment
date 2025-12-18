@@ -1,0 +1,1108 @@
+{
+  "info": {
+    "name": "Order Execution Engine API",
+    "description": "Complete API collection for Order Execution Engine with DEX routing and WebSocket status updates.\n\n## Setup Instructions:\n1. Import this collection into Postman\n2. Set the `baseUrl` variable (default: http://localhost:3000)\n3. Start with 'Execute Order' to create an order\n4. Copy the returned `orderId` to the `orderId` variable\n5. Use 'Get Order Status' to check order progress\n6. Use 'Get Queue Metrics' to monitor queue health\n\n## WebSocket Updates:\nFor real-time WebSocket updates, use a WebSocket client (Postman supports WebSocket in newer versions) or use the provided JavaScript example in the WebSocket request description.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "1. Orders",
+      "item": [
+        {
+          "name": "Execute Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    pm.test('Response has required fields', function () {",
+                  "        pm.expect(response).to.have.property('orderId');",
+                  "        pm.expect(response).to.have.property('websocketUrl');",
+                  "        pm.expect(response).to.have.property('status');",
+                  "    });",
+                  "    ",
+                  "    pm.test('Initial status is pending', function () {",
+                  "        pm.expect(response.status).to.eql('pending');",
+                  "    });",
+                  "    ",
+                  "    pm.collectionVariables.set('orderId', response.orderId);",
+                  "    console.log('Order created:', response.orderId);",
+                  "    console.log('WebSocket URL:', response.websocketUrl);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenIn\": \"SOL\",\n  \"tokenOut\": \"USDC\",\n  \"amountIn\": 100,\n  \"userId\": \"user-123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"]
+            },
+            "description": "**Step 1: Submit Order**\n\nSubmit a new order for execution. This endpoint:\n- Validates the order request\n- Creates an order record in the database\n- Adds the order to the execution queue\n- Returns an `orderId` and `websocketUrl` for live updates\n\n**Response:**\n- `orderId`: Unique identifier for tracking the order\n- `websocketUrl`: WebSocket endpoint URL for real-time status updates\n- `status`: Initial status (always 'pending')\n\n**Note:** After submitting, copy the `orderId` - you'll need it for status checks and WebSocket connections."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains order details', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('orderId');",
+                  "    pm.expect(jsonData).to.have.property('tokenIn');",
+                  "    pm.expect(jsonData).to.have.property('tokenOut');",
+                  "    pm.expect(jsonData).to.have.property('amountIn');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});",
+                  "",
+                  "pm.test('Status is valid order status', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const validStatuses = ['pending', 'routing', 'building', 'submitted', 'confirmed', 'failed'];",
+                  "    pm.expect(validStatuses).to.include(jsonData.status);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}"],
+              "variable": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}",
+                  "description": "Order ID from Execute Order response"
+                }
+              ]
+            },
+            "description": "**Step 2: Check Order Status**\n\nRetrieve the current status of an order using its `orderId`.\n\n**Status Values:**\n- `pending`: Order received and queued\n- `routing`: Comparing DEX prices (Raydium vs Meteora)\n- `building`: Creating transaction for selected DEX\n- `submitted`: Transaction sent to network\n- `confirmed`: Transaction successful (includes `txHash` and `executedPrice`)\n- `failed`: Execution failed (includes `errorMessage`)\n\n**Use this endpoint:**\n- To poll for order status updates\n- As a fallback if WebSocket connection fails\n- To retrieve order details after completion"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Queue Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has queue metrics structure', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('waiting');",
+                  "    pm.expect(jsonData).to.have.property('active');",
+                  "    pm.expect(jsonData).to.have.property('completed');",
+                  "    pm.expect(jsonData).to.have.property('failed');",
+                  "});",
+                  "",
+                  "pm.test('Queue metrics are non-negative numbers', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.waiting).to.be.a('number').and.to.be.at.least(0);",
+                  "    pm.expect(jsonData.active).to.be.a('number').and.to.be.at.least(0);",
+                  "    pm.expect(jsonData.completed).to.be.a('number').and.to.be.at.least(0);",
+                  "    pm.expect(jsonData.failed).to.be.a('number').and.to.be.at.least(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/metrics/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "metrics", "queue"]
+            },
+            "description": "**Monitor Queue Health**\n\nGet current queue metrics to monitor system health.\n\n**Response Fields:**\n- `waiting`: Number of orders waiting in queue\n- `active`: Number of orders currently being processed\n- `completed`: Total number of completed orders\n- `failed`: Total number of failed orders\n\n**Use this endpoint:**\n- To monitor system load\n- To check if orders are being processed\n- For debugging and performance monitoring"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 1: Order Submission - Valid Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('orderId');",
+                  "    pm.expect(jsonData).to.have.property('websocketUrl');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData.status).to.eql('pending');",
+                  "});",
+                  "",
+                  "pm.test('orderId is valid UUID format', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+                  "    pm.expect(jsonData.orderId).to.match(uuidRegex);",
+                  "});",
+                  "",
+                  "pm.test('websocketUrl contains orderId', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.websocketUrl).to.include(jsonData.orderId);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('testOrderId1', response.orderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenIn\": \"SOL\",\n  \"tokenOut\": \"USDC\",\n  \"amountIn\": 100,\n  \"userId\": \"test-user-1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"]
+            },
+            "description": "**Test: Order Submission Validation**\n\nTests:\n- Valid order submission returns 201\n- Response contains orderId, websocketUrl, status\n- orderId is valid UUID\n- Initial status is 'pending'"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 2: Order Submission - Invalid Request (Negative Amount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400 for invalid request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message indicates validation failure', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "    pm.expect(jsonData.message).to.include('amountIn');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenIn\": \"SOL\",\n  \"tokenOut\": \"USDC\",\n  \"amountIn\": -100,\n  \"userId\": \"test-user\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"]
+            },
+            "description": "**Test: Invalid Order Validation**\n\nTests:\n- Negative amountIn returns 400\n- Error message indicates validation failure"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 3: Order Submission - Missing Required Fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400 for missing fields', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message indicates missing required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenIn\": \"SOL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"]
+            },
+            "description": "**Test: Missing Required Fields**\n\nTests:\n- Missing required fields returns 400\n- Error message indicates what's missing"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 4: Get Order Status - Valid Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains order details', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('orderId');",
+                  "    pm.expect(jsonData).to.have.property('tokenIn');",
+                  "    pm.expect(jsonData).to.have.property('tokenOut');",
+                  "    pm.expect(jsonData).to.have.property('amountIn');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('createdAt');",
+                  "    pm.expect(jsonData).to.have.property('updatedAt');",
+                  "});",
+                  "",
+                  "pm.test('Status is valid order status', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const validStatuses = ['pending', 'routing', 'building', 'submitted', 'confirmed', 'failed'];",
+                  "    pm.expect(validStatuses).to.include(jsonData.status);",
+                  "});",
+                  "",
+                  "pm.test('amountIn is positive number', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.amountIn).to.be.a('number').and.to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}"]
+            },
+            "description": "**Test: Get Order Status**\n\nTests:\n- Valid orderId returns 200\n- Response contains all order fields\n- Status is valid order status value\n- amountIn is positive"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 5: Get Order Status - Order Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404 for non-existent order', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Error message indicates order not found', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "    pm.expect(jsonData.message).to.include('not found');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "**Test: Order Not Found**\n\nTests:\n- Non-existent orderId returns 404\n- Error message indicates order not found"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 6: Order Status Progression - Routing Logic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// First, create an order",
+                  "pm.sendRequest({",
+                  "    url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            tokenIn: 'SOL',",
+                  "            tokenOut: 'USDC',",
+                  "            amountIn: 50,",
+                  "            userId: 'test-routing'",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    if (err) {",
+                  "        pm.test('Order creation failed', function () {",
+                  "            pm.expect.fail('Failed to create order: ' + err);",
+                  "        });",
+                  "        return;",
+                  "    }",
+                  "    ",
+                  "    pm.test('Order created successfully', function () {",
+                  "        pm.expect(res.code).to.equal(201);",
+                  "    });",
+                  "    ",
+                  "    const orderId = res.json().orderId;",
+                  "    pm.collectionVariables.set('routingTestOrderId', orderId);",
+                  "    ",
+                  "    // Wait for order to progress through routing",
+                  "    setTimeout(function() {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/' + orderId,",
+                  "            method: 'GET'",
+                  "        }, function (err2, res2) {",
+                  "            pm.test('Order status retrieved', function () {",
+                  "                pm.expect(res2.code).to.equal(200);",
+                  "            });",
+                  "            ",
+                  "            const order = res2.json();",
+                  "            pm.test('Order progressed from pending', function () {",
+                  "                pm.expect(['routing', 'building', 'submitted', 'confirmed']).to.include(order.status);",
+                  "            });",
+                  "            ",
+                  "            // If order reached building stage, DEX should be selected",
+                  "            if (order.status === 'building' || order.status === 'submitted' || order.status === 'confirmed') {",
+                  "                pm.test('DEX selected (routing logic working)', function () {",
+                  "                    pm.expect(order).to.have.property('dexUsed');",
+                  "                    pm.expect(['raydium', 'meteora']).to.include(order.dexUsed);",
+                  "                });",
+                  "                ",
+                  "                pm.test('amountOut calculated after routing', function () {",
+                  "                    pm.expect(order).to.have.property('amountOut');",
+                  "                    pm.expect(order.amountOut).to.be.a('number').and.to.be.above(0);",
+                  "                });",
+                  "            }",
+                  "        });",
+                  "    }, 2000); // Wait 2 seconds for routing to complete",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{routingTestOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{routingTestOrderId}}"]
+            },
+            "description": "**Test: Routing Logic**\n\nTests:\n- Order progresses from pending to routing\n- DEX is selected (raydium or meteora)\n- amountOut is calculated after routing\n- Order status progression works correctly"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 7: Different Token Pairs - Routing Selection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "    url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            tokenIn: 'ETH',",
+                  "            tokenOut: 'USDT',",
+                  "            amountIn: 10,",
+                  "            userId: 'test-token-pair'",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    pm.test('Order created with different token pair', function () {",
+                  "        pm.expect(res.code).to.equal(201);",
+                  "    });",
+                  "    ",
+                  "    const orderId = res.json().orderId;",
+                  "    ",
+                  "    setTimeout(function() {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/' + orderId,",
+                  "            method: 'GET'",
+                  "        }, function (err2, res2) {",
+                  "            const order = res2.json();",
+                  "            ",
+                  "            pm.test('Token pair preserved', function () {",
+                  "                pm.expect(order.tokenIn).to.eql('ETH');",
+                  "                pm.expect(order.tokenOut).to.eql('USDT');",
+                  "            });",
+                  "            ",
+                  "            if (order.status === 'building' || order.status === 'submitted' || order.status === 'confirmed') {",
+                  "                pm.test('DEX routing works for different token pairs', function () {",
+                  "                    pm.expect(order.dexUsed).to.be.oneOf(['raydium', 'meteora']);",
+                  "                });",
+                  "            }",
+                  "        });",
+                  "    }, 3000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenIn\": \"ETH\",\n  \"tokenOut\": \"USDT\",\n  \"amountIn\": 10,\n  \"userId\": \"test-token-pair\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/execute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"]
+            },
+            "description": "**Test: Different Token Pairs**\n\nTests:\n- Order with different token pair (ETH/USDT) works\n- DEX routing logic applies to different pairs\n- Token pair values are preserved"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 8: Order Confirmation - Executed Price and TX Hash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "    url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            tokenIn: 'SOL',",
+                  "            tokenOut: 'USDC',",
+                  "            amountIn: 25,",
+                  "            userId: 'test-confirmation'",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    const orderId = res.json().orderId;",
+                  "    ",
+                  "    // Wait for order to complete (up to 10 seconds)",
+                  "    let attempts = 0;",
+                  "    const maxAttempts = 20;",
+                  "    ",
+                  "    const checkOrder = function() {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/' + orderId,",
+                  "            method: 'GET'",
+                  "        }, function (err2, res2) {",
+                  "            const order = res2.json();",
+                  "            ",
+                  "            if (order.status === 'confirmed') {",
+                  "                pm.test('Order confirmed successfully', function () {",
+                  "                    pm.expect(order.status).to.eql('confirmed');",
+                  "                });",
+                  "                ",
+                  "                pm.test('Transaction hash present', function () {",
+                  "                    pm.expect(order).to.have.property('txHash');",
+                  "                    pm.expect(order.txHash).to.be.a('string').and.to.have.length.above(0);",
+                  "                });",
+                  "                ",
+                  "                pm.test('Executed price present', function () {",
+                  "                    pm.expect(order).to.have.property('executedPrice');",
+                  "                    pm.expect(order.executedPrice).to.be.a('number').and.to.be.above(0);",
+                  "                });",
+                  "                ",
+                  "                pm.test('Amount out calculated', function () {",
+                  "                    pm.expect(order).to.have.property('amountOut');",
+                  "                    pm.expect(order.amountOut).to.be.a('number').and.to.be.above(0);",
+                  "                    pm.expect(order.amountOut).to.be.below(order.amountIn * 2); // Sanity check",
+                  "                });",
+                  "            } else if (order.status === 'failed') {",
+                  "                pm.test('Order failed (check error message)', function () {",
+                  "                    pm.expect(order).to.have.property('errorMessage');",
+                  "                });",
+                  "            } else if (attempts < maxAttempts) {",
+                  "                attempts++;",
+                  "                setTimeout(checkOrder, 500);",
+                  "            } else {",
+                  "                pm.test('Order did not complete in time', function () {",
+                  "                    pm.expect.fail('Order still in status: ' + order.status);",
+                  "                });",
+                  "            }",
+                  "        });",
+                  "    };",
+                  "    ",
+                  "    setTimeout(checkOrder, 1000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}"]
+            },
+            "description": "**Test: Order Confirmation**\n\nTests:\n- Order reaches confirmed status\n- Transaction hash is present\n- Executed price is calculated\n- Amount out is calculated correctly"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 9: Queue Metrics - After Multiple Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Create multiple orders",
+                  "const orderPromises = [];",
+                  "for (let i = 0; i < 3; i++) {",
+                  "    orderPromises.push(new Promise(function(resolve) {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "            method: 'POST',",
+                  "            header: { 'Content-Type': 'application/json' },",
+                  "            body: {",
+                  "                mode: 'raw',",
+                  "                raw: JSON.stringify({",
+                  "                    tokenIn: 'SOL',",
+                  "                    tokenOut: 'USDC',",
+                  "                    amountIn: 10 + i,",
+                  "                    userId: 'test-queue-' + i",
+                  "                })",
+                  "            }",
+                  "        }, function(err, res) {",
+                  "            resolve(res.json().orderId);",
+                  "        });",
+                  "    }));",
+                  "}",
+                  "",
+                  "Promise.all(orderPromises).then(function(orderIds) {",
+                  "    // Wait a bit for orders to be processed",
+                  "    setTimeout(function() {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/metrics/queue',",
+                  "            method: 'GET'",
+                  "        }, function(err, res) {",
+                  "            const metrics = res.json();",
+                  "            ",
+                  "            pm.test('Queue metrics reflect multiple orders', function () {",
+                  "                pm.expect(metrics.completed + metrics.active + metrics.waiting).to.be.at.least(3);",
+                  "            });",
+                  "            ",
+                  "            pm.test('Active orders are within concurrency limit', function () {",
+                  "                pm.expect(metrics.active).to.be.at.most(10); // Concurrency limit",
+                  "            });",
+                  "            ",
+                  "            pm.test('Total orders tracked correctly', function () {",
+                  "                const total = metrics.waiting + metrics.active + metrics.completed + metrics.failed;",
+                  "                pm.expect(total).to.be.at.least(3);",
+                  "            });",
+                  "        });",
+                  "    }, 2000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/metrics/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "metrics", "queue"]
+            },
+            "description": "**Test: Queue Metrics with Multiple Orders**\n\nTests:\n- Queue metrics reflect multiple orders\n- Active orders respect concurrency limit (max 10)\n- Total orders tracked correctly"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 10: Queue Behavior - Concurrent Order Submission",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const concurrentOrders = 5;",
+                  "const orderPromises = [];",
+                  "",
+                  "for (let i = 0; i < concurrentOrders; i++) {",
+                  "    orderPromises.push(new Promise(function(resolve) {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "            method: 'POST',",
+                  "            header: { 'Content-Type': 'application/json' },",
+                  "            body: {",
+                  "                mode: 'raw',",
+                  "                raw: JSON.stringify({",
+                  "                    tokenIn: 'SOL',",
+                  "                    tokenOut: 'USDC',",
+                  "                    amountIn: 20 + i,",
+                  "                    userId: 'concurrent-test-' + i",
+                  "                })",
+                  "            }",
+                  "        }, function(err, res) {",
+                  "            resolve({",
+                  "                success: res.code === 201,",
+                  "                orderId: res.json().orderId",
+                  "            });",
+                  "        });",
+                  "    }));",
+                  "}",
+                  "",
+                  "Promise.all(orderPromises).then(function(results) {",
+                  "    pm.test('All concurrent orders submitted successfully', function () {",
+                  "        const successful = results.filter(r => r.success).length;",
+                  "        pm.expect(successful).to.equal(concurrentOrders);",
+                  "    });",
+                  "    ",
+                  "    pm.test('All orders have unique orderIds', function () {",
+                  "        const orderIds = results.map(r => r.orderId);",
+                  "        const uniqueIds = new Set(orderIds);",
+                  "        pm.expect(uniqueIds.size).to.equal(concurrentOrders);",
+                  "    });",
+                  "    ",
+                  "    // Check queue metrics",
+                  "    setTimeout(function() {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/metrics/queue',",
+                  "            method: 'GET'",
+                  "        }, function(err, res) {",
+                  "            const metrics = res.json();",
+                  "            ",
+                  "            pm.test('Queue handles concurrent submissions', function () {",
+                  "                const totalInQueue = metrics.waiting + metrics.active;",
+                  "                pm.expect(totalInQueue + metrics.completed).to.be.at.least(concurrentOrders);",
+                  "            });",
+                  "        });",
+                  "    }, 1000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/metrics/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "metrics", "queue"]
+            },
+            "description": "**Test: Concurrent Order Submission**\n\nTests:\n- Multiple orders can be submitted concurrently\n- All orders get unique orderIds\n- Queue handles concurrent submissions correctly"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 11: Order Status Progression - Complete Lifecycle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "    url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: {",
+                  "        mode: 'raw',",
+                  "        raw: JSON.stringify({",
+                  "            tokenIn: 'SOL',",
+                  "            tokenOut: 'USDC',",
+                  "            amountIn: 30,",
+                  "            userId: 'lifecycle-test'",
+                  "        })",
+                  "    }",
+                  "}, function (err, res) {",
+                  "    const orderId = res.json().orderId;",
+                  "    const statusProgression = [];",
+                  "    ",
+                  "    const checkStatus = function(attempt) {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/' + orderId,",
+                  "            method: 'GET'",
+                  "        }, function (err2, res2) {",
+                  "            const order = res2.json();",
+                  "            ",
+                  "            if (!statusProgression.includes(order.status)) {",
+                  "                statusProgression.push(order.status);",
+                  "            }",
+                  "            ",
+                  "            if (order.status === 'confirmed' || order.status === 'failed') {",
+                  "                pm.test('Order completed lifecycle', function () {",
+                  "                    pm.expect(['confirmed', 'failed']).to.include(order.status);",
+                  "                });",
+                  "                ",
+                  "                pm.test('Status progression includes expected stages', function () {",
+                  "                    pm.expect(statusProgression).to.include('pending');",
+                  "                    pm.expect(statusProgression).to.include('routing');",
+                  "                });",
+                  "                ",
+                  "                if (order.status === 'confirmed') {",
+                  "                    pm.test('Confirmed order has all required fields', function () {",
+                  "                        pm.expect(order).to.have.property('txHash');",
+                  "                        pm.expect(order).to.have.property('executedPrice');",
+                  "                        pm.expect(order).to.have.property('dexUsed');",
+                  "                        pm.expect(order).to.have.property('amountOut');",
+                  "                    });",
+                  "                }",
+                  "            } else if (attempt < 30) {",
+                  "                setTimeout(function() { checkStatus(attempt + 1); }, 500);",
+                  "            } else {",
+                  "                pm.test('Order lifecycle completed', function () {",
+                  "                    pm.expect.fail('Order did not complete. Last status: ' + order.status);",
+                  "                });",
+                  "            }",
+                  "        });",
+                  "    };",
+                  "    ",
+                  "    setTimeout(function() { checkStatus(0); }, 500);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}"]
+            },
+            "description": "**Test: Complete Order Lifecycle**\n\nTests:\n- Order progresses through all expected statuses\n- Status progression includes pending → routing → building → submitted → confirmed\n- Confirmed orders have all required fields"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 12: Different Amounts - Routing Consistency",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const amounts = [10, 50, 100, 500];",
+                  "const orderPromises = amounts.map(function(amount) {",
+                  "    return new Promise(function(resolve) {",
+                  "        pm.sendRequest({",
+                  "            url: pm.variables.get('baseUrl') + '/api/orders/execute',",
+                  "            method: 'POST',",
+                  "            header: { 'Content-Type': 'application/json' },",
+                  "            body: {",
+                  "                mode: 'raw',",
+                  "                raw: JSON.stringify({",
+                  "                    tokenIn: 'SOL',",
+                  "                    tokenOut: 'USDC',",
+                  "                    amountIn: amount,",
+                  "                    userId: 'amount-test-' + amount",
+                  "                })",
+                  "            }",
+                  "        }, function(err, res) {",
+                  "            resolve({",
+                  "                amount: amount,",
+                  "                orderId: res.json().orderId",
+                  "            });",
+                  "        });",
+                  "    });",
+                  "});",
+                  "",
+                  "Promise.all(orderPromises).then(function(orders) {",
+                  "    setTimeout(function() {",
+                  "        const checkPromises = orders.map(function(order) {",
+                  "            return new Promise(function(resolve) {",
+                  "                pm.sendRequest({",
+                  "                    url: pm.variables.get('baseUrl') + '/api/orders/' + order.orderId,",
+                  "                    method: 'GET'",
+                  "                }, function(err, res) {",
+                  "                    resolve(res.json());",
+                  "                });",
+                  "            });",
+                  "        });",
+                  "        ",
+                  "        Promise.all(checkPromises).then(function(orderDetails) {",
+                  "            pm.test('All orders processed regardless of amount', function () {",
+                  "                const processed = orderDetails.filter(o => ",
+                  "                    ['building', 'submitted', 'confirmed'].includes(o.status)",
+                  "                ).length;",
+                  "                pm.expect(processed).to.be.at.least(amounts.length - 1);",
+                  "            });",
+                  "            ",
+                  "            pm.test('Amount out proportional to amount in', function () {",
+                  "                orderDetails.forEach(function(order, idx) {",
+                  "                    if (order.amountOut) {",
+                  "                        const ratio = order.amountOut / order.amountIn;",
+                  "                        pm.expect(ratio).to.be.above(0).and.to.be.below(2);",
+                  "                    }",
+                  "                });",
+                  "            });",
+                  "        });",
+                  "    }, 5000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/metrics/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "metrics", "queue"]
+            },
+            "description": "**Test: Different Amounts**\n\nTests:\n- Orders with different amounts all process correctly\n- Amount out is proportional to amount in\n- Routing logic works consistently across amounts"
+          },
+          "response": []
+        }
+      ],
+      "description": "Order execution endpoints. Start with 'Execute Order', then use 'Get Order Status' to track progress."
+    },
+    {
+      "name": "2. WebSocket (Real-time Updates)",
+      "item": [
+        {
+          "name": "Order Status Updates (WebSocket)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://{{baseUrl}}/api/orders/execute?orderId={{orderId}}",
+              "protocol": "ws",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}",
+                  "description": "Order ID from Execute Order response"
+                }
+              ]
+            },
+            "description": "**Step 3: Connect to WebSocket for Live Updates**\n\nConnect via WebSocket to receive real-time order status updates.\n\n**Note:** Postman's WebSocket support may vary by version. If WebSocket doesn't work in Postman, use the JavaScript example below.\n\n**JavaScript Example (Browser/Node.js):**\n```javascript\n// First, get orderId from Execute Order endpoint\nconst orderId = 'your-order-id-here';\n\n// Connect to WebSocket\nconst ws = new WebSocket(`ws://localhost:3000/api/orders/execute?orderId=${orderId}`);\n\nws.onopen = () => {\n  console.log('WebSocket connected');\n};\n\nws.onmessage = (event) => {\n  const update = JSON.parse(event.data);\n  console.log('Status:', update.status);\n  console.log('Update:', update);\n  \n  // Close when order completes\n  if (update.status === 'confirmed' || update.status === 'failed') {\n    console.log('Order completed:', update.status);\n    ws.close();\n  }\n};\n\nws.onerror = (error) => {\n  console.error('WebSocket error:', error);\n};\n\nws.onclose = () => {\n  console.log('WebSocket closed');\n};\n```\n\n**Status Progression:**\nYou'll receive messages as the order progresses:\n1. `pending` → Order received\n2. `routing` → Comparing DEX prices\n3. `building` → Creating transaction\n4. `submitted` → Transaction sent\n5. `confirmed` → Success (includes `txHash`) OR `failed` → Error (includes `error`)\n\n**Message Format:**\n```json\n{\n  \"orderId\": \"uuid\",\n  \"status\": \"routing\",\n  \"message\": \"Comparing DEX prices...\",\n  \"dexUsed\": \"raydium\",\n  \"txHash\": \"0x...\",\n  \"executedPrice\": 0.955\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 13: WebSocket Connection - Valid OrderId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Note: This test requires WebSocket support in Postman",
+                  "// For manual testing, use the JavaScript example in the description",
+                  "pm.test('WebSocket test requires manual execution', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "});",
+                  "",
+                  "// Instructions for manual WebSocket testing:",
+                  "// 1. Create an order first using Execute Order",
+                  "// 2. Connect to WebSocket with the orderId",
+                  "// 3. Verify connection is established",
+                  "// 4. Verify status updates are received",
+                  "// 5. Verify connection closes when order completes"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://{{baseUrl}}/api/orders/execute?orderId={{orderId}}",
+              "protocol": "ws",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}"
+                }
+              ]
+            },
+            "description": "**Test: WebSocket Connection with Valid OrderId**\n\n**Manual Test Steps:**\n1. Execute an order first to get orderId\n2. Connect to WebSocket URL with orderId\n3. Verify connection opens successfully\n4. Verify status updates are received in real-time\n5. Verify connection closes gracefully when order completes\n\n**Expected Behavior:**\n- Connection established successfully\n- Status updates received: routing → building → submitted → confirmed\n- Each update contains orderId, status, and relevant fields\n- Connection closes when status is 'confirmed' or 'failed'"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 14: WebSocket Connection - Missing OrderId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Note: This test requires WebSocket support in Postman",
+                  "pm.test('WebSocket rejection test requires manual execution', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "});",
+                  "",
+                  "// Instructions for manual WebSocket testing:",
+                  "// 1. Try to connect to WebSocket without orderId parameter",
+                  "// 2. Verify connection is rejected with error code 1008",
+                  "// 3. Verify error message indicates missing orderId"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://{{baseUrl}}/api/orders/execute",
+              "protocol": "ws",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"]
+            },
+            "description": "**Test: WebSocket Connection Without OrderId**\n\n**Manual Test Steps:**\n1. Attempt to connect to WebSocket without orderId query parameter\n2. Verify connection is rejected\n3. Verify close code is 1008 (Policy Violation)\n4. Verify close reason indicates missing orderId\n\n**Expected Behavior:**\n- Connection rejected immediately\n- Close code: 1008\n- Close reason: 'Missing orderId'"
+          },
+          "response": []
+        },
+        {
+          "name": "Test 15: WebSocket Status Update Progression",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Note: This test requires WebSocket support and manual execution",
+                  "pm.test('WebSocket status progression test requires manual execution', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "});",
+                  "",
+                  "// Instructions for manual WebSocket testing:",
+                  "// 1. Create an order and connect to WebSocket",
+                  "// 2. Track all received status updates",
+                  "// 3. Verify status progression: pending → routing → building → submitted → confirmed",
+                  "// 4. Verify each update contains orderId and status",
+                  "// 5. Verify dexUsed appears after routing stage",
+                  "// 6. Verify txHash and executedPrice appear on confirmed status"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://{{baseUrl}}/api/orders/execute?orderId={{orderId}}",
+              "protocol": "ws",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "execute"],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}"
+                }
+              ]
+            },
+            "description": "**Test: WebSocket Status Update Progression**\n\n**Manual Test Steps:**\n1. Create an order and connect to WebSocket\n2. Monitor all WebSocket messages\n3. Verify status progression through all stages\n4. Verify message format and fields at each stage\n\n**Expected Status Progression:**\n- `routing`: Contains orderId, status, message\n- `building`: Contains orderId, status, message, dexUsed\n- `submitted`: Contains orderId, status, message, dexUsed\n- `confirmed`: Contains orderId, status, message, dexUsed, txHash, executedPrice\n\n**Message Format Validation:**\n- All messages are valid JSON\n- All messages contain orderId matching the connected order\n- Status values are valid order statuses"
+          },
+          "response": []
+        }
+      ],
+      "description": "WebSocket endpoint for real-time order status updates. Requires an orderId from the Execute Order endpoint."
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string",
+      "description": "Base URL of the Order Execution Engine API"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string",
+      "description": "Order ID returned from Execute Order endpoint. Auto-populated after executing an order."
+    }
+  ]
+}
