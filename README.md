@@ -61,7 +61,7 @@ Market orders were chosen as the initial implementation because they represent t
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/0xitsHimanshu/eterna-labs-assignment.git
    cd Order-Execution
    ```
 
